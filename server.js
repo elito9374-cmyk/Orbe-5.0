@@ -6,7 +6,9 @@ const Database=require('better-sqlite3');
 const bcrypt=require('bcryptjs');
 const jwt=require('jsonwebtoken');
 const OPENAI_API_KEY=process.env.OPENAI_API_KEY||'';
-const OPENAI_MODEL=process.env.OPENAI_MODEL||'gpt-6-luna';
+const OPENAI_MODEL=(process.env.OPENAI_MODEL||'').trim()||'gpt-5.6-luna';
+const MODEL_FALLBACKS=['gpt-5.6-luna','gpt-5.5','gpt-5.4'];
+let workingModel=null;
 const aiHits=new Map();
 
 const app=express();
@@ -34,11 +36,32 @@ app.post('/api/ai/chat',auth,async(req,res)=>{
   const messages=Array.isArray(req.body?.messages)?req.body.messages.slice(-12).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.content||'').slice(0,1200)})).filter(m=>m.content):[];
   if(!messages.length)return res.status(400).json({error:'Message manquant.'});
   try{
-    const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${OPENAI_API_KEY}`},body:JSON.stringify({model:OPENAI_MODEL,instructions:`Tu es Orbe IA, le copilote d’un réseau social destiné notamment aux jeunes. Réponds en français, avec un ton chaleureux, clair et court. Aide à découvrir des centres d’intérêt, lancer des discussions, imaginer des missions de groupe et utiliser Orbe positivement. Ne révèle jamais de données privées sur les membres et n’invente jamais de profil. Ne demande jamais mot de passe, adresse, établissement scolaire, numéro de téléphone, localisation précise ou autre donnée sensible. Encourage les activités en groupe et les lieux publics quand une rencontre réelle est évoquée. Ne prétends pas être humain.`,input:messages,max_output_tokens:500})});
-    const data=await r.json(); if(!r.ok)return res.status(502).json({error:'Le service IA est momentanément indisponible.'});
-    const text=data.output_text||((data.output||[]).flatMap(x=>x.content||[]).map(x=>x.text||'').filter(Boolean).join('\n'))||'Je n’ai pas réussi à formuler une réponse.';
-    res.json({text});
-  }catch(e){res.status(502).json({error:'Impossible de contacter Orbe IA.'});}
+    const instructions=`Tu es Orbe IA, le copilote d’un réseau social destiné notamment aux jeunes. Réponds en français, avec un ton chaleureux, clair et court. Aide à découvrir des centres d’intérêt, lancer des discussions, imaginer des missions de groupe et utiliser Orbe positivement. Ne révèle jamais de données privées sur les membres et n’invente jamais de profil. Ne demande jamais mot de passe, adresse, établissement scolaire, numéro de téléphone, localisation précise ou autre donnée sensible. Encourage les activités en groupe et les lieux publics quand une rencontre réelle est évoquée. Ne prétends pas être humain.`;
+    const candidates=[...new Set([workingModel,OPENAI_MODEL,...MODEL_FALLBACKS].filter(Boolean))];
+    let lastErr='';
+    for(const model of candidates){
+      const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),45000);
+      let r,data;
+      try{
+        r=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','Authorization':`Bearer ${OPENAI_API_KEY}`},body:JSON.stringify({model,instructions,input:messages,max_output_tokens:1500})});
+        data=await r.json().catch(()=>({}));
+      }finally{clearTimeout(to);}
+      if(r.ok){
+        const text=(data.output_text||((data.output||[]).flatMap(x=>x.content||[]).map(x=>x.text||'').filter(Boolean).join('\n'))).trim();
+        if(text){workingModel=model;return res.json({text});}
+        lastErr='réponse vide (status='+(data.status||'?')+')'; continue;
+      }
+      const em=(data&&data.error&&data.error.message)||('HTTP '+r.status);
+      lastErr='HTTP '+r.status+' '+em;
+      console.error('[orbe][openai] modèle '+model+' -> '+lastErr);
+      if(r.status===401)return res.status(502).json({error:'Clé OpenAI refusée. Vérifie OPENAI_API_KEY dans Railway.'});
+      if(r.status===429)return res.status(502).json({error:'Quota OpenAI atteint : vérifie ton solde de crédits OpenAI.'});
+      if(r.status===404||r.status===400||(data&&data.error&&data.error.code==='model_not_found'))continue;
+      break;
+    }
+    console.error('[orbe][openai] échec final : '+lastErr);
+    return res.status(502).json({error:'Orbe IA est momentanément indisponible. Réessaie dans un instant.'});
+  }catch(e){console.error('[orbe][openai] exception : '+e.message);res.status(502).json({error:'Impossible de contacter Orbe IA.'});}
 });
 
 app.post('/api/signup',(req,res)=>{const {email,username,password,bio='',avatar=''}=req.body||{}; if(typeof email!=='string'||typeof username!=='string'||typeof password!=='string'||!email||!username||password.length<8||password.length>200||email.length>254||username.length>30)return res.status(400).json({error:'Champs invalides'}); try{const hash=bcrypt.hashSync(password,12);const info=db.prepare('INSERT INTO users(email,username,password_hash,bio,avatar,created_at) VALUES(?,?,?,?,?,?)').run(email.toLowerCase(),username.toLowerCase(),hash,String(bio).slice(0,120),String(avatar).slice(0,500000),Date.now());const u=db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);const token=jwt.sign({id:u.id},JWT_SECRET,{expiresIn:'30d'});res.json({token,user:safeUser(u)});}catch(e){res.status(400).json({error:'E-mail ou pseudo déjà utilisé'});}});
