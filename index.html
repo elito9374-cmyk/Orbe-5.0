@@ -475,27 +475,14 @@ const PAL=[
 ];
 const AVC=['#5B3DF5','#FF6B4A','#0F7B6C','#9B4DFF','#E0475B','#2D6BFF','#B8860B'];
 const USERS={
-  nina:{name:'nina.martel',bio:'Lille, cafés et lumière',c:0},
-  theo:{name:'theo.dubois',bio:'Photo de rue',c:1},
-  lou:{name:'atelier.lou',bio:'Céramique faite main',c:2},
-  kai:{name:'kai.runs',bio:'Trail et petits matins',c:3},
-  maya:{name:'maya.cuisine',bio:'Recettes du dimanche',c:4},
-  bastien:{name:'bastien.v',bio:'Vélo, Flandre, vent de face',c:5},
   me:{name:'toi',bio:'',c:6}
 };
-const DEMO=[
-  {id:1,u:'nina',seed:11,pal:0,time:'il y a 2 h',likes:248,liked:false,saved:false,cap:'Premier café sous le soleil, le reste de la journée peut attendre.',cm:[{u:'theo',t:'Cette lumière !'},{u:'lou',t:'On y va samedi ?'}]},
-  {id:2,u:'lou',seed:24,pal:3,time:'il y a 4 h',likes:512,liked:true,saved:false,cap:'Sortie de four ce matin. Chaque bol est un peu différent, c’est le principe.',cm:[{u:'maya',t:'Je prends le bleu !'}]},
-  {id:3,u:'kai',seed:37,pal:2,time:'il y a 6 h',likes:97,liked:false,saved:true,cap:'18 km avant le petit-déjeuner. Les jambes diront ce qu’elles veulent demain.',cm:[]},
-  {id:4,u:'maya',seed:52,pal:4,time:'hier',likes:331,liked:false,saved:false,cap:'Tarte aux poires, recette complète en commentaire si ça vous tente.',cm:[{u:'bastien',t:'Je veux la recette'},{u:'nina',t:'Il en reste ?'}]},
-  {id:5,u:'bastien',seed:68,pal:5,time:'hier',likes:154,liked:false,saved:false,cap:'Vent de face sur la digue, et pourtant le sourire.',cm:[]},
-  {id:6,u:'theo',seed:81,pal:1,time:'il y a 2 j',likes:420,liked:false,saved:false,cap:'Gare de Lille-Flandres, 18h12.',cm:[{u:'kai',t:'Superbe cadrage'}]}
-];
-const STORY_CAPS={nina:'Café du matin',theo:'Heure bleue',lou:'Fournée du jour',kai:'Kilomètre 12',maya:'Mise en place',bastien:'Digue, 7h'};
+const DEMO=[];
+const STORY_CAPS={};
 let acc=null, posts=[], following=new Set(), seen=new Set();
 let view='home', newPal=0, newSeed=7, newImg=null;
 let peopleQuery=''; let activeChat=null; let cloudPeople=[]; let aiMessages=[];
-const DEMO_PEOPLE=['nina','theo','lou','kai','maya','bastien'];
+const DEMO_PEOPLE=[];
 function allPeople(){
   const local=accounts().map(a=>({key:'acc:'+a.id,name:a.username,bio:a.bio||'Nouveau sur Orbe',avatar:a.avatar||null,c:6,localId:a.id}));
   return [...DEMO_PEOPLE.map(k=>({key:k,...USERS[k]})),...local,...cloudPeople.map(u=>({key:'cloud:'+u.id,name:u.username,bio:u.bio||'Membre Orbe',avatar:u.avatar||null,c:6,cloudId:u.id}))].filter((p,i,a)=>a.findIndex(x=>x.key===p.key)===i);
@@ -549,11 +536,11 @@ const newId=()=>'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,7
 function setMe(){
   USERS.me={name:acc.username,bio:acc.bio||'',c:6,avatar:acc.avatar||null};
 }
-function enterCloud(a,token){ cloudToken=token; store.set('orbe:token',token); acc={id:String(a.id),email:a.email||'',username:a.username,bio:a.bio||'',avatar:a.avatar||null}; setMe(); view='home'; $('#auth').hidden=true; $('#shell').hidden=false; render(); refreshCloudPeople(''); toast('Bienvenue sur Orbe, '+acc.username); }
+function enterCloud(a,token){ cloudToken=token; store.set('orbe:token',token); acc={id:String(a.id),email:a.email||'',username:a.username,bio:a.bio||'',avatar:a.avatar||null}; setMe(); posts=[...store.get('orbe:posts:'+acc.id,[])]; following=new Set(store.get('orbe:follow:'+acc.id,[])); view='home'; $('#auth').hidden=true; $('#shell').hidden=false; render(); refreshCloudPeople(''); if(!arguments[2])toast('Bienvenue sur Orbe, '+acc.username); }
 function enter(a){
   acc=a; setMe();
   store.set('orbe:session',a.id);
-  posts=[...store.get('orbe:posts:'+a.id,[]),...JSON.parse(JSON.stringify(DEMO))];
+  posts=[...store.get('orbe:posts:'+a.id,[])];
   following=new Set(store.get('orbe:follow:'+a.id,[]));
   view='home';
   $('#auth').hidden=true; $('#shell').hidden=false;
@@ -678,10 +665,7 @@ function renderChrome(){
   $('#logoutSide .i').innerHTML=icon('logout');
   $$('[data-view]').forEach(b=>b.setAttribute('aria-current',b.dataset.view===view?'page':'false'));
 }
-function storiesHTML(){
-  const ids=['nina','theo','lou','kai','maya','bastien'];
-  return `<div class="stories">`+ids.map(k=>`<button class="story" data-story="${k}" aria-label="Story de ${esc(USERS[k].name)}"><div class="ring ${seen.has(k)?'seen':''}">${av(k)}</div><span>${esc(USERS[k].name.split('.')[0])}</span></button>`).join('')+`</div>`;
-}
+function storiesHTML(){return '';}
 function postHTML(p){
   const last=p.cm.slice(-2), mine=p.u==='me';
   return `<article class="post" data-id="${p.id}">
@@ -719,12 +703,10 @@ function renderHome(){
     <div class="orbe-tags">${tags.map(t=>`<button class="orbe-tag" data-pulse="${esc(t)}">${t}</button>`).join('')}</div>
     <div class="pulsebar">${['✨ Ça me parle','😂 J’ai ri','🤯 Wow','💭 Ça me fait réfléchir','👀 À découvrir'].map((x,i)=>`<button class="pulse ${i===0?'on':''}" data-pulse="${esc(x)}">${x}</button>`).join('')}</div>
     ${storiesHTML()}
-    <div class="feed">${posts.map(postHTML).join('')}</div>`;
+    <div class="feed">${posts.length?posts.map(postHTML).join(''):'<div class="empty-chat" style="padding:48px 16px;text-align:center"><b>Rien ici pour l’instant.</b><br>Publie ta première photo avec le bouton <b>Créer</b>, ou va dans <b>Rencontrer</b> pour trouver des gens.</div>'}</div>`;
 }
 function renderExplore(){
-  const tiles=[];
-  for(let i=0;i<18;i++){const big=i%7===0;tiles.push(`<div class="tile ${big?'big':''}">${art(200+i*13,i)}<div class="hv">${icon('heart',20,true)} ${(40+(i*37)%400)} découvertes</div></div>`)}
-  $('#main').innerHTML=`<div class="grid-wrap"><div class="explore-head"><div><div class="eyebrow">LABORATOIRE DE DÉCOUVERTE</div><h1>Explorer sans algorithme fermé.</h1><p>Des idées qui sortent de tes habitudes.</p></div><button class="discover" data-discover>✦ Surprends-moi</button></div><div class="orbe-tags"><span class="orbe-tag"><b>ORBE 01</b> · sport</span><span class="orbe-tag"><b>ORBE 02</b> · création</span><span class="orbe-tag"><b>ORBE 03</b> · ailleurs</span></div><div class="grid">${tiles.join('')}</div></div>`;
+  $('#main').innerHTML=`<div class="grid-wrap"><div class="explore-head"><div><div class="eyebrow">LABORATOIRE DE DÉCOUVERTE</div><h1>Explorer.</h1><p>Les publications apparaîtront ici.</p></div></div><div class="empty-chat" style="padding:48px 16px;text-align:center">Rien à explorer pour l’instant.</div></div>`;
 }
 function renderPeople(){
   if(ORBE_API&&cloudToken)refreshCloudPeople(peopleQuery).then(()=>{if(view==='people')renderPeople()});
@@ -749,14 +731,14 @@ function renderMessages(){
 function renderProfile(){
   const mine=posts.filter(p=>p.u==='me');
   const f=following.size;
-  $('#main').innerHTML=`<div class="grid-wrap"><div class="eyebrow">TON IDENTITÉ ORBE</div><div class="profile-head">${av('me')}<div><h1 style="margin:0">${esc(USERS.me.name)}</h1>${USERS.me.bio?`<div class="bio">${esc(USERS.me.bio)}</div>`:''}<div class="stats"><span><b>${mine.length}</b> publications</span><span><b>${f}</b> connexions</span><span><b>${12+f*3}</b> découvertes</span></div><div class="profile-actions"><button class="btn soft" data-edit>Modifier mon orbite</button><button class="btn ghost" data-logout>Se déconnecter</button></div></div></div><div class="orbe-tags"><span class="orbe-tag">🪐 <b>Centres d’intérêt</b> en construction</span><span class="orbe-tag">⚡ Impulsions actives</span><span class="orbe-tag">🌱 Découverte ouverte</span></div>${mine.length?`<div class="grid">${mine.map(p=>`<div class="tile">${media(p)}</div>`).join('')}</div>`:`<div style="text-align:center;padding:48px 16px;color:var(--muted)"><p style="margin:0 0 14px">Ton Orbe attend sa première création.</p><button class="btn primary" data-open-create>Créer mon premier moment</button></div>`}</div>`;
+  $('#main').innerHTML=`<div class="grid-wrap"><div class="eyebrow">TON IDENTITÉ ORBE</div><div class="profile-head">${av('me')}<div><h1 style="margin:0">${esc(USERS.me.name)}</h1>${USERS.me.bio?`<div class="bio">${esc(USERS.me.bio)}</div>`:''}<div class="stats"><span><b>${mine.length}</b> publications</span><span><b>${f}</b> connexions</span><span><b>${mine.reduce((n,x)=>n+(x.likes||0),0)}</b> découvertes</span></div><div class="profile-actions"><button class="btn soft" data-edit>Modifier mon orbite</button><button class="btn ghost" data-logout>Se déconnecter</button></div></div></div><div class="orbe-tags"><span class="orbe-tag">🪐 <b>Centres d’intérêt</b> en construction</span><span class="orbe-tag">⚡ Impulsions actives</span><span class="orbe-tag">🌱 Découverte ouverte</span></div>${mine.length?`<div class="grid">${mine.map(p=>`<div class="tile">${media(p)}</div>`).join('')}</div>`:`<div style="text-align:center;padding:48px 16px;color:var(--muted)"><p style="margin:0 0 14px">Ton Orbe attend sa première création.</p><button class="btn primary" data-open-create>Créer mon premier moment</button></div>`}</div>`;
 }
 function renderRight(){
-  const s=['maya','bastien','kai','lou'];
+  const s=[];
   $('#right').innerHTML=`<div class="me">${av('me')}<div><strong>${esc(USERS.me.name)}</strong><small>${esc(USERS.me.bio||'Ajoute une bio')}</small></div><button class="follow" data-edit>Modifier</button></div>
     <h3>Rencontrer</h3><button class="btn soft wide" data-view="people" style="margin-bottom:10px">🔎 Trouver des gens</button>
     ${s.map(k=>`<div class="sugg">${av(k)}<div><strong>${esc(USERS[k].name)}</strong><small>${esc(USERS[k].bio)}</small></div><button class="follow ${following.has(k)?'on':''}" data-follow="${k}">${following.has(k)?'Abonné':'Suivre'}</button></div>`).join('')}
-    <p class="foot">© 2026 Orbe. Fait à Lille avec de la couleur.</p>`;
+    <p class="foot">© 2026 Orbe.</p>`;
 }
 function render(){
   renderChrome();
@@ -922,7 +904,7 @@ $('#editForm').addEventListener('submit',async e=>{
 /* ================= Stories ================= */
 let sTimer=null, sKeys=[], sIdx=0;
 function openStory(k){
-  sKeys=['nina','theo','lou','kai','maya','bastien']; sIdx=sKeys.indexOf(k); showStory();
+  sKeys=[]; sIdx=sKeys.indexOf(k); showStory();
   $('#viewer').classList.add('open');
 }
 function showStory(){
@@ -950,6 +932,12 @@ $('#viewer').addEventListener('click',e=>{
 });
 /* ================= Démarrage ================= */
 (function boot(){
+  const tk=store.get('orbe:token',null);
+  if(tk&&ORBE_API){
+    cloudToken=tk;
+    api('/api/me').then(d=>enterCloud(d.user,tk,true)).catch(()=>{cloudToken=null;store.del('orbe:token');showAuth('login');});
+    return;
+  }
   const id=store.get('orbe:session',null);
   const a=id&&accounts().find(x=>x.id===id);
   if(a)enter(a); else showAuth('signup');
